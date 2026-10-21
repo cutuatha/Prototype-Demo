@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — New Trucking Company Setup</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18212b;background:#f2f5f7}*{box-sizing:border-box}body{margin:0}.wrap{max-width:780px;margin:auto;padding:16px}.hero{background:#18344b;color:#fff;padding:22px;border-radius:16px}.hero h1{margin:0 0 8px;font-size:clamp(1.5rem,4vw,2.1rem)}.panel{background:#fff;border:1px solid #dbe2e8;border-radius:14px;padding:18px;margin-top:14px}.muted{color:#52616d;font-size:.94rem}.notice{background:#fff4d6;border:1px solid #e9cb79;padding:12px 14px;border-radius:10px;margin:14px 0}.progress{height:8px;background:#dce4e9;border-radius:9px;overflow:hidden;margin:14px 0 6px}.bar{height:100%;background:#28749a;width:0;transition:width .15s}.stepno{font-size:.9rem;color:#52616d}.question{font-size:1.35rem;margin:8px 0 14px}.field{display:block;width:100%;font:inherit;padding:11px;border:1px solid #aebbc5;border-radius:8px;margin:6px 0 12px;background:white}.choice{display:block;border:1px solid #ccd6de;border-radius:10px;padding:12px;margin:8px 0;cursor:pointer}.choice input{margin-right:8px}.choice:has(input:checked){border-color:#28749a;background:#edf7fb}.btn{border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:650;cursor:pointer;background:#1c5b80;color:#fff;margin:5px 5px 0 0}.btn.alt{background:#e7edf1;color:#172b3a}.btn:disabled{opacity:.4}.actions{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-top:18px}.error{color:#9a3412;min-height:1.2em}.reviewrow{padding:10px 0;border-bottom:1px solid #e0e6eb}.reviewrow:last-child{border:0}.value{font-weight:700}.small{font-size:.86rem}.footer{margin:18px 0;color:#52616d;font-size:.85rem}@media(max-width:540px){.wrap{padding:11px}.hero,.panel{padding:15px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero"><p style="margin:0 0 6px;opacity:.8">PROTOTYPE • STARTUP SETUP EXPERIMENT</p><h1>Start a trucking company</h1><p style="margin:0">Make one decision at a time. Your answers stay in this browser as a planning draft until you confirm them.</p></header>
+<div class="notice"><strong>Planning simulation only.</strong> This setup does not create a real company, file legal paperwork, authorize financing or purchases, or verify regulatory compliance. No startup money or equipment is assumed.</div>
+<div class="progress"><div class="bar" id="bar"></div></div><div class="stepno" id="stepno"></div>
+<main class="panel" id="screen" aria-live="polite"></main>
+<div class="actions"><button class="btn alt" id="back">Back</button><div><button class="btn alt" id="save">Save draft</button><button class="btn" id="next">Continue</button></div></div>
+<p class="footer">Draft save is local to this browser on this device. This early setup build does not yet connect to a financial ledger or equipment listings. Equipment decisions will come after startup funds are established, with truck selection before trailer selection.</p>
+</div>
+<script>
+const steps = [
+ {key:"company",title:"What is the company called?",hint:"Enter a working name. You can change it before final confirmation.",type:"text",label:"Company name",placeholder:"e.g., Carter's Transport",required:true},
+ {key:"location",title:"Where will the company be headquartered?",hint:"Enter a city and state. This is a planning location, not a verified business address.",type:"text",label:"Headquarters city and state",placeholder:"City, State",required:true},
+ {key:"role",title:"Who will operate the truck?",hint:"Choose the operating model that best describes your plan.",type:"radio",required:true,options:[["owner_operator","Owner-operator — I drive the truck"],["hired_drivers","Owner-managed — hire company drivers"],["mixed","Mixed model — owner may drive and hire drivers"],["undecided","Not decided yet"]]},
+ {key:"operation",title:"What kind of trucking operation are you planning?",hint:"These are planning choices only. They do not establish authority or equipment.",type:"checks",required:true,groups:[{label:"Operating range",name:"range",options:[["local","Local"],["regional","Regional"],["otr","Over-the-road (OTR)"],["undecided","Not decided"]],single:true},{label:"Freight focus",name:"freight",options:[["dry_van","Dry van / general freight"],["reefer","Temperature-controlled / reefer"],["flatbed","Flatbed"],["other","Other / undecided"]],single:true}]},
+ {key:"structure",title:"What business structure are you considering?",hint:"This records your preference only. It is not legal or tax advice and does not register a business.",type:"radio",required:true,options:[["sole_proprietorship","Sole proprietorship"],["llc","Limited liability company (LLC)"],["corporation","Corporation"],["partnership","Partnership"],["undecided","Not decided yet"]]},
+ {key:"capital",title:"How much startup money will be available?",hint:"Enter only funds you expect to have available. Do not include unapproved loans or financing.",type:"money",label:"Available startup funds (USD)",placeholder:"0.00",required:true},
+ {key:"compensation",title:"How will you pay yourself for your work?",hint:"For an owner-driver, driving compensation can be tracked separately from business profit. You can leave the decision open.",type:"radio",required:true,options:[["mileage","Mileage-based driving wages"],["profit","Percentage of net profit after deductions"],["salary","Salary"],["undecided","Not decided yet"]]},
+ {key:"reserve",title:"How much operating cash reserve should the plan target?",hint:"The game will estimate the dollar target from projected operating expenses, rather than use a fixed reserve amount.",type:"radio",required:true,options:[["30","30 days of projected operating expenses"],["45","45 days of projected operating expenses"],["60","60 days of projected operating expenses"],["undecided","Not decided yet"]]}
+];
+let index=0;
+let draft={};
+const $=id=>document.getElementById(id);
+try{draft=JSON.parse(localStorage.getItem("prototypeStartupDraft")||"{}");}catch(e){draft={};}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function saveDraft(){try{localStorage.setItem("prototypeStartupDraft",JSON.stringify(draft));$("error")&&($("error").textContent="");return true;}catch(e){return false;}}
+function selected(key,val){return draft[key]===val?"checked":"";}
+function render(){
+ const s=steps[index];$("stepno").textContent="Step "+(index+1)+" of "+steps.length;$("bar").style.width=((index+1)/steps.length*100)+"%";
+ $("back").disabled=index===0;$("next").textContent=index===steps.length-1?"Review setup":"Continue";
+ let body='<h2 class="question">'+esc(s.title)+'</h2><p class="muted">'+esc(s.hint)+'</p>';
+ if(s.type==="text"||s.type==="money"){body+='<label for="answer">'+esc(s.label)+'</label><input class="field" id="answer" '+(s.type==="money"?'type="number" min="0" step="0.01" inputmode="decimal"':'type="text" maxlength="100"')+' placeholder="'+esc(s.placeholder)+'" value="'+esc(draft[s.key]||"")+'">';}
+ if(s.type==="radio"){body+=s.options.map(o=>'<label class="choice"><input type="radio" name="answer" value="'+esc(o[0])+'" '+selected(s.key,o[0])+'>'+esc(o[1])+'</label>').join("");}
+ if(s.type==="checks"){for(const g of s.groups){body+='<h3>'+esc(g.label)+'</h3>'+g.options.map(o=>'<label class="choice"><input type="radio" name="'+esc(g.name)+'" value="'+esc(o[0])+'" '+(draft[g.name]===o[0]?"checked":"")+'>'+esc(o[1])+'</label>').join("");}}
+ body+='<p class="error" id="error" role="alert"></p>'; $("screen").innerHTML=body;
+}
+function collect(){
+ const s=steps[index];let v;
+ if(s.type==="text"||s.type==="money"){v=$("answer").value.trim();if(s.required&&!v){$("error").textContent="Please enter an answer before continuing.";return false;}if(s.type==="money"&&Number(v)<0){$("error").textContent="Enter zero or a positive amount.";return false;}draft[s.key]=v;}
+ if(s.type==="radio"){const x=document.querySelector('input[name="answer"]:checked');if(!x){$("error").textContent="Please choose an option, or choose Not decided yet.";return false;}draft[s.key]=x.value;}
+ if(s.type==="checks"){for(const g of s.groups){const x=document.querySelector('input[name="'+g.name+'"]:checked');if(!x){$("error").textContent="Please choose an option for "+g.label.toLowerCase()+", or choose Not decided.";return false;}draft[g.name]=x.value;}}
+ saveDraft();return true;
+}
+function labelFor(key,val){const s=steps.find(x=>x.key===key);if(s?.options){return s.options.find(o=>o[0]===val)?.[1]||val;}const maps={range:{local:"Local",regional:"Regional",otr:"Over-the-road (OTR)",undecided:"Not decided"},freight:{dry_van:"Dry van / general freight",reefer:"Temperature-controlled / reefer",flatbed:"Flatbed",other:"Other / undecided"}};return maps[key]?.[val]||val||"Not entered";}
+function review(){
+ const rows=[["Company name",draft.company],["Headquarters",draft.location],["Operating model",labelFor("role",draft.role)],["Operating range",labelFor("range",draft.range)],["Freight focus",labelFor("freight",draft.freight)],["Business structure",labelFor("structure",draft.structure)],["Startup funds",draft.capital===""||draft.capital==null?"Not entered":Number(draft.capital).toLocaleString("en-US",{style:"currency",currency:"USD"})],["Owner compensation",labelFor("compensation",draft.compensation)],["Operating reserve target",draft.reserve==="undecided"?"Not decided":draft.reserve+" days of projected operating expenses"]];
+ $("stepno").textContent="Review • draft only";$("bar").style.width="100%";
+ $("screen").innerHTML='<h2 class="question">Review your startup plan</h2><p class="muted">Nothing here is a purchase, financing commitment, or legal authorization. Confirming records this setup as your planning draft.</p>'+rows.map(r=>'<div class="reviewrow"><div class="muted">'+esc(r[0])+'</div><div class="value">'+esc(r[1]||"Not entered")+'</div></div>').join("")+'<div class="notice">Next milestone: establish the startup budget and cash availability, then evaluate a truck first and a trailer second. No equipment has been selected or purchased by this setup screen.</div><p id="reviewmsg" class="muted"></p>';
+ $("back").disabled=false;$("next").textContent="Confirm planning draft";
+}
+let reviewing=false;
+$("back").addEventListener("click",()=>{if(reviewing){reviewing=false;index=steps.length-1;render();$("next").textContent="Review setup";}else if(index>0){index--;render();}});
+$("save").addEventListener("click",()=>{const ok=saveDraft();alert(ok?"Draft saved on this device.":"The browser could not save the draft.");});
+$("next").addEventListener("click",()=>{
+ if(reviewing){draft.draftStatus="planning_confirmed";draft.draftConfirmedAt=new Date().toISOString();saveDraft();$("screen").innerHTML='<h2 class="question">Planning draft confirmed</h2><p>Your setup answers have been saved in this browser as a planning draft. No funds, financing, equipment, or legal approvals have been committed.</p><div class="notice"><strong>Setup milestone complete.</strong> The next development step is equipment planning, starting with the truck. Trailer selection will remain locked until a truck is explicitly selected.</div><p><a href="./index.html">Return to the current freight demo</a></p><button class="btn alt" id="editDraft">Review or edit setup again</button>'; $("editDraft").addEventListener("click",()=>{reviewing=false;index=0;render();});$("stepno").textContent="Setup draft saved";$("bar").style.width="100%";$("next").disabled=true;return;}
+ if(!collect())return;
+ if(index<steps.length-1){index++;render();}else{reviewing=true;review();}
+});
+render();
+</script>
+</body>
+</html>
