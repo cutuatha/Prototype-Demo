@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — First Playable Trucking Loop 0.1</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18212b;background:#f2f5f7}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1040px;margin:auto;padding:20px}.hero{background:#18344b;color:white;padding:24px;border-radius:16px}.hero h1{margin:0 0 8px;font-size:clamp(1.5rem,4vw,2.25rem)}.notice{background:#fff4d6;border:1px solid #e9cb79;padding:12px 14px;border-radius:10px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.stat,.panel,.load{background:white;border:1px solid #dbe2e8;border-radius:12px;padding:14px}.stat small{display:block;color:#52616d}.stat strong{font-size:1.25rem}.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.load h3{margin:0 0 6px}.load p{margin:6px 0;color:#43515d}.load .money{font-weight:750;font-size:1.15rem;color:#1c6049}.btn{border:0;border-radius:8px;padding:10px 13px;font:inherit;font-weight:650;cursor:pointer;background:#1c5b80;color:white;margin:4px 4px 0 0}.btn:disabled{opacity:.45;cursor:not-allowed}.btn.alt{background:#e7edf1;color:#172b3a}.btn.warn{background:#9a4c28}.section-title{margin:24px 0 10px}.status{font-weight:700}.log{min-height:60px;white-space:pre-line;color:#304454}.muted{color:#52616d;font-size:.92rem}.actions{display:flex;flex-wrap:wrap;gap:4px}.footer{font-size:.85rem;color:#53616b;margin:18px 0}@media(max-width:560px){.wrap{padding:12px}.stats{grid-template-columns:1fr}.hero{padding:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+<p style="margin:0 0 6px;opacity:.8">PROTOTYPE • EXPERIMENTAL BUILD 0.1</p>
+<h1>Your first freight run</h1>
+<p style="margin-bottom:0">Choose a load, accept it, pick it up, deliver it, and review the simulated result.</p>
+</header>
+<div class="notice"><strong>Test build only.</strong> All load rates, miles, costs, and starting cash below are invented test fixtures—not market quotes, approved business rules, or financial advice. This experiment is separate from the existing game and does not save progress after you close or refresh it.</div>
+<div class="stats">
+<div class="stat"><small>Simulated cash</small><strong id="cash">$10,000.00</strong></div>
+<div class="stat"><small>Run status</small><strong id="status">Looking for freight</strong></div>
+<div class="stat"><small>Completed loads</small><strong id="completed">0</strong></div>
+</div>
+<h2 class="section-title">Available freight</h2>
+<div id="board" class="board"></div>
+<h2 class="section-title">Current load</h2>
+<section class="panel">
+<div id="current"><p class="muted">No load accepted yet. Choose one above to begin.</p></div>
+<div id="actions" class="actions"></div>
+</section>
+<h2 class="section-title">Trip result & activity</h2>
+<section class="panel">
+<div id="result" class="muted">Your trip summary will appear here after delivery.</div>
+<hr style="border:0;border-top:1px solid #e0e6eb;margin:14px 0">
+<div id="log" class="log">Ready to start. Select a load to play.</div>
+<div class="actions"><button class="btn alt" id="reset">Reset test run</button></div>
+</section>
+<p class="footer">Prototype intent: test the shape of the gameplay before locking down deeper systems. This build deliberately omits financing, insurance, persistent records, real-world dispatch, and finalized accounting policy.</p>
+</div>
+<script src="./delivery_transaction.js"></script>
+<script src="./load_availability.js"></script>
+<script>
+const INITIAL_CASH = 10000; // Synthetic test fixture only.
+const loads = [
+ {id:"A",name:"Palletized supplies",from:"Des Moines, IA",to:"Omaha, NE",miles:135,revenue:720,operatingCost:310,detail:"One simple regional delivery"},
+ {id:"B",name:"Packaged food",from:"Fort Dodge, IA",to:"Minneapolis, MN",miles:225,revenue:1080,operatingCost:465,detail:"Longer run, higher test revenue"},
+ {id:"C",name:"Building materials",from:"Ames, IA",to:"Kansas City, MO",miles:190,revenue:910,operatingCost:405,detail:"Mid-distance delivery"}
+];
+let cash, completed, current, phase, lastResult;
+let completedLoadIds = new Set();
+let runId = 0;
+let postedOperationIds = new Set();
+let attemptsByOperationId = new Map();
+let recoveryRequiredOperationIds = new Set();
+const $ = id => document.getElementById(id);
+const money = n => n.toLocaleString("en-US",{style:"currency",currency:"USD"});
+function reset(){runId++;completedLoadIds=new Set();postedOperationIds=new Set();attemptsByOperationId=new Map();recoveryRequiredOperationIds=new Set();cash=INITIAL_CASH;completed=0;current=null;phase="board";lastResult=null;render();$("log").textContent="New test run started. Starting cash is a synthetic $10,000 fixture.";$("result").textContent="Your trip summary will appear here after delivery."}
+function accept(id){if(current||!window.PrototypeLoadAvailability.canAcceptLoad(id,completedLoadIds))return;current=loads.find(x=>x.id===id);if(!current)return;phase="accepted";lastResult=null;$("log").textContent="Load "+current.id+" accepted. Next step: go to pickup.";$("result").textContent="Trip in progress.";render()}
+function pickup(){if(!current||phase!=="accepted")return;phase="picked";$("log").textContent="Pickup confirmed for "+current.name+". Next step: deliver to "+current.to+"." ;render()}
+function deliver(){
+ if(!current||phase!=="picked")return;
+ const load=current;
+ const operationId="run-"+runId+":delivery:"+load.id;
+ const outcome=window.PrototypeDeliveryTransactions.postDelivery({load,cash,operationId,postedOperationIds,attemptsByOperationId,recoveryRequiredOperationIds,commitCash:nextCash=>{cash=nextCash;}});
+ if(outcome.status!=="POSTED"){
+  const message=outcome.reason || (outcome.status==="DUPLICATE"?"This delivery operation was already recorded. No additional cash was added.":"No new financial result was recorded.");
+  if(outcome.status==="RECOVERY_REQUIRED")phase="recovery_required";
+  $("log").textContent="Delivery financial result not posted ("+outcome.status+"). "+message;
+  $("result").textContent=outcome.status==="RECOVERY_REQUIRED"?"Automatic attempts stopped. This test run requires manual review; reset only if you intend to discard this temporary run.":"No new financial result was recorded. A single retry is permitted if the recording step failed.";
+  render();
+  return;
+ }
+ window.PrototypeLoadAvailability.markLoadCompleted(load.id,completedLoadIds);
+ completed++;
+ lastResult={...load,net:outcome.net,cashAfter:cash,operationId,status:outcome.status};
+ phase="delivered";
+ $("log").textContent="Delivery confirmed. Financial result posted once. Test revenue "+money(outcome.revenue)+" minus test operating cost "+money(outcome.operatingCost)+" = "+money(outcome.net)+" net contribution.";
+ $("result").innerHTML="<strong>Load "+load.id+" delivered</strong><p>Revenue: "+money(outcome.revenue)+"</p><p>Estimated test operating cost: −"+money(outcome.operatingCost)+"</p><p><strong>Net contribution: "+money(outcome.net)+"</strong></p><p>Cash after this load: "+money(cash)+"</p><p class='muted'>Recorded in this temporary browser session only. These are simplified test calculations, not a complete accounting or tax result.</p>";
+ render();
+}
+function nextLoad(){if(phase==="recovery_required")return;current=null;phase="board";$("log").textContent="Previous load completed. Choose another load to continue.";render()}
+function render(){
+ $("cash").textContent=money(cash);$("completed").textContent=completed;
+ $("status").textContent=phase==="board"?"Looking for freight":phase==="accepted"?"Load accepted":phase==="picked"?"In transit":phase==="delivered"?"Delivered":phase==="recovery_required"?"Recovery required":"Ready";
+ $("board").innerHTML=loads.map(l=>'<article class="load"><h3>Load '+l.id+': '+l.name+'</h3><p>'+l.from+' → '+l.to+'</p><p>'+l.miles+' test miles • '+l.detail+'</p><p class="money">'+money(l.revenue)+' gross test revenue</p><p class="muted">Illustrative operating cost: '+money(l.operatingCost)+'</p><button class="btn" data-load="'+l.id+'" '+((current||!window.PrototypeLoadAvailability.canAcceptLoad(l.id,completedLoadIds))?'disabled':'')+'>'+(completedLoadIds.has(l.id)?'Load completed':'Accept load '+l.id)+'</button></article>').join("");
+ document.querySelectorAll("[data-load]").forEach(btn=>btn.addEventListener("click",()=>accept(btn.dataset.load)));
+ if(!current){$("current").innerHTML='<p class="muted">No load accepted yet. Choose one above to begin.</p>';$("actions").innerHTML="";return}
+ $("current").innerHTML='<h3>Load '+current.id+': '+current.name+'</h3><p><strong>Pickup:</strong> '+current.from+'</p><p><strong>Delivery:</strong> '+current.to+'</p><p><strong>Distance:</strong> '+current.miles+' illustrative miles</p><p class="status">Progress: '+(phase==="accepted"?"Accepted — awaiting pickup":phase==="picked"?"Picked up — awaiting delivery":phase==="recovery_required"?"Recovery required — further posting stopped":"Delivered")+'</p>';
+ if(phase==="accepted")$("actions").innerHTML='<button class="btn" id="pickup">Confirm pickup</button>';
+ else if(phase==="picked")$("actions").innerHTML='<button class="btn" id="deliver">Confirm delivery</button>';
+ else if(phase==="recovery_required")$("actions").innerHTML='<p class="muted">Stop here: review is required before continuing this test run.</p>';
+ else $("actions").innerHTML='<button class="btn" id="next">Find next load</button>';
+ if($("pickup"))$("pickup").addEventListener("click",pickup);if($("deliver"))$("deliver").addEventListener("click",deliver);if($("next"))$("next").addEventListener("click",nextLoad);
+}
+$("reset").addEventListener("click",reset);reset();
+</script>
+</body>
+</html>
