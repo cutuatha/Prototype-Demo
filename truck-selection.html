@@ -31,7 +31,7 @@ const $=id=>document.getElementById(id);let trucks=[],nextId=1,confirmedId=null;
 try{trucks=JSON.parse(localStorage.getItem("prototypeTruckOptions")||"[]");}catch(e){trucks=[]}
 try{nextId=Math.max(1,Number(localStorage.getItem("prototypeTruckNextId"))||1, ...trucks.map(t=>Number(String(t.id).replace(/\D/g,""))+1));}catch(e){}
 try{confirmedId=localStorage.getItem("prototypeTruckConfirmedId");}catch(e){}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;',"'":"&#39;"}[c]));}
+function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll(String.fromCharCode(34),"&quot;").replaceAll(String.fromCharCode(39),"&#39;");}
 function persist(){localStorage.setItem("prototypeTruckOptions",JSON.stringify(trucks));localStorage.setItem("prototypeTruckNextId",String(nextId));if(confirmedId)localStorage.setItem("prototypeTruckConfirmedId",confirmedId);else localStorage.removeItem("prototypeTruckConfirmedId");}
 function searchUrl(domain){const terms=[$("make").value==="Any manufacturer"?"":$("make").value,$("model").value.trim(),$("sleeper").value,$("area").value.trim()].filter(Boolean).join(" ");const query="site:"+domain+" "+terms+" used semi truck for sale"+($("minPrice").value?" price over "+$("minPrice").value:"")+($("maxPrice").value?" under "+$("maxPrice").value:"");return "https://www.google.com/search?q="+encodeURIComponent(query);}
 $("searchTruckPaper").addEventListener("click",()=>window.open(searchUrl("truckpaper.com"),"_blank","noopener"));
