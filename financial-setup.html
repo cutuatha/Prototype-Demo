@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — Startup Financial Setup</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18212b;background:#f2f5f7}*{box-sizing:border-box}body{margin:0}.wrap{max-width:800px;margin:auto;padding:15px}.hero{background:#18344b;color:white;padding:22px;border-radius:15px}.panel{background:#fff;border:1px solid #dbe2e8;border-radius:13px;padding:17px;margin-top:13px}.muted{color:#52616d;font-size:.93rem}.notice{background:#fff4d6;border:1px solid #e9cb79;padding:12px;border-radius:10px;margin:12px 0}.field{width:100%;font:inherit;padding:10px;border:1px solid #aebbc5;border-radius:8px;margin:5px 0 12px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.btn{border:0;border-radius:8px;padding:11px 14px;font:inherit;font-weight:650;background:#1c5b80;color:#fff;margin:4px 4px 0 0;cursor:pointer}.btn.alt{background:#e7edf1;color:#172b3a}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #e0e6eb}.row:last-child{border:0}.amount{font-weight:750;text-align:right}.big{font-size:1.35rem;font-weight:800}.footer{font-size:.84rem;color:#52616d;margin:18px 0}@media(max-width:540px){.wrap{padding:10px}.grid{grid-template-columns:1fr}.hero,.panel{padding:14px}}
+</style></head>
+<body><div class="wrap">
+<header class="hero"><p style="margin:0 0 5px;opacity:.8">PROTOTYPE • FINANCIAL SETUP EXPERIMENT</p><h1 style="margin:0 0 8px">Startup funds and cash reserve</h1><p style="margin:0">Establish the money plan before looking at equipment.</p></header>
+<div class="notice"><strong>Planning only.</strong> These are estimates you enter, not verified bank balances, actual payments, quotes, or accounting entries. Saving this plan does not deposit money or commit funds.</div>
+<section class="panel"><h2>1. Available startup funds</h2><p class="muted">The starting amount comes from your company setup draft. Change it here if your estimate has changed.</p><label for="funds">Total funds expected to be available (USD)</label><input class="field" id="funds" type="number" min="0" step="0.01" inputmode="decimal"></section>
+<section class="panel"><h2>2. Estimated one-time startup costs</h2><p class="muted">Do not enter a truck or trailer down payment yet. Equipment has not been selected.</p><div class="grid">
+<div><label for="formation">Business setup / professional fees</label><input class="field cost" id="formation" type="number" min="0" step=".01" value="0"></div>
+<div><label for="permits">Initial permits and registrations</label><input class="field cost" id="permits" type="number" min="0" step=".01" value="0"></div>
+<div><label for="insurance">Insurance deposit / initial premium</label><input class="field cost" id="insurance" type="number" min="0" step=".01" value="0"></div>
+<div><label for="otherStartup">Other startup costs</label><input class="field cost" id="otherStartup" type="number" min="0" step=".01" value="0"></div>
+</div></section>
+<section class="panel"><h2>3. Projected monthly operating expenses</h2><p class="muted">Use estimates appropriate to your planned operating model. Enter zero when unknown or not applicable; unknown costs can make the reserve estimate too low, so review these figures later.</p><div class="grid">
+<div><label for="fuel">Fuel</label><input class="field expense" id="fuel" type="number" min="0" step=".01" value="0"></div>
+<div><label for="maintenance">Maintenance and repair allowance</label><input class="field expense" id="maintenance" type="number" min="0" step=".01" value="0"></div>
+<div><label for="monthlyInsurance">Monthly insurance</label><input class="field expense" id="monthlyInsurance" type="number" min="0" step=".01" value="0"></div>
+<div><label for="equipmentPayments">Truck / trailer payments</label><input class="field expense" id="equipmentPayments" type="number" min="0" step=".01" value="0"></div>
+<div><label for="wages">Driver wages and payroll costs</label><input class="field expense" id="wages" type="number" min="0" step=".01" value="0"></div>
+<div><label for="permitsMonthly">Permits, tolls, and operating fees</label><input class="field expense" id="permitsMonthly" type="number" min="0" step=".01" value="0"></div>
+<div><label for="otherMonthly">Other monthly operating costs</label><input class="field expense" id="otherMonthly" type="number" min="0" step=".01" value="0"></div>
+</div><label for="days">Cash reserve target</label><select class="field" id="days"><option value="30">30 days</option><option value="45">45 days</option><option value="60">60 days</option><option value="undecided">Not decided yet</option></select><p class="muted">Reserve formula: projected monthly operating expenses ÷ 30 × selected reserve days. This is a planning estimate, not a forecast.</p></section>
+<section class="panel"><h2>4. Financial readiness review</h2><div id="summary" aria-live="polite"></div><button class="btn" id="save">Save financial planning draft</button> <a class="btn alt" href="./startup.html" style="display:inline-block;text-decoration:none">Back to company setup</a></section>
+<p class="footer">Saved in local storage on this browser and device only. This does not sync to another device and is not yet connected to a formal accounting ledger. Any remaining amount is only a planning estimate, not permission to purchase or finance equipment.</p>
+</div>
+<script>
+const $=id=>document.getElementById(id);const fmt=n=>Number(n||0).toLocaleString("en-US",{style:"currency",currency:"USD"});const num=id=>Math.max(0,Number($(id).value)||0);
+let startup={};let finance={};try{startup=JSON.parse(localStorage.getItem("prototypeStartupDraft")||"{}")}catch(e){}try{finance=JSON.parse(localStorage.getItem("prototypeFinancialDraft")||"{}")}catch(e){}
+const fields=["funds","formation","permits","insurance","otherStartup","fuel","maintenance","monthlyInsurance","equipmentPayments","wages","permitsMonthly","otherMonthly","days"];
+for(const id of fields){if(finance[id]!==undefined)$(id).value=finance[id]}
+if(finance.funds===undefined&&startup.capital!==undefined)$("funds").value=startup.capital;
+if(finance.days===undefined&&["30","45","60"].includes(startup.reserve))$("days").value=startup.reserve;
+function calculate(){
+ const funds=num("funds"),one=["formation","permits","insurance","otherStartup"].reduce((a,id)=>a+num(id),0),monthly=["fuel","maintenance","monthlyInsurance","equipmentPayments","wages","permitsMonthly","otherMonthly"].reduce((a,id)=>a+num(id),0),days=$("days").value;
+ const after=funds-one,reserve=days==="undecided"?null:monthly*Number(days)/30,available=reserve===null?null:after-reserve;
+ const rows=[["Available startup funds",fmt(funds)],["Estimated one-time startup costs", "−"+fmt(one)],["Funds remaining after startup costs",fmt(after)],["Projected monthly operating expenses",fmt(monthly)],["Target cash reserve",reserve===null?"Not decided":fmt(reserve)],["Estimated amount left for future equipment and other needs",available===null?"Not calculated":fmt(available)]];
+ $("summary").innerHTML=rows.map((r,i)=>'<div class="row"><span>'+r[0]+'</span><span class="amount '+(i===5?'big':'')+'">'+r[1]+'</span></div>').join("")+'<div class="notice">'+(after<0?"Warning: estimated one-time costs exceed the funds entered.":reserve!==null&&available<0?"Warning: the planned startup costs and reserve exceed the funds entered.":reserve===null?"Choose a reserve period to calculate the amount remaining.":available===0?"The plan leaves no amount beyond the reserve target.":"This estimate leaves funds beyond the selected reserve target, subject to the accuracy of your inputs.")+'</div><p class="muted">Opening account balance is recorded as a planning assumption only. No deposit, expense, equipment purchase, or financing transaction has occurred.</p>';
+}
+function save(){finance={};for(const id of fields)finance[id]=$(id).value;finance.savedAt=new Date().toISOString();finance.status="planning_draft";try{localStorage.setItem("prototypeFinancialDraft",JSON.stringify(finance));$("save").textContent="Draft saved on this device";}catch(e){alert("The browser could not save this draft.");}}
+for(const id of fields)$(id).addEventListener("input",()=>{ $("save").textContent="Save financial planning draft";calculate()});
+$("days").addEventListener("change",calculate);$("save").addEventListener("click",save);calculate();
+</script></body></html>
