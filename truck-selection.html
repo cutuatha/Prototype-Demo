@@ -27,6 +27,7 @@
 <p class="footer">Truck entries and comparison marks are saved locally in this browser only. Prices and details are user-entered records, not independently verified. Trailer selection is intentionally not offered on this page; it comes only after you explicitly confirm a truck.</p>
 </div>
 <script src="./prototype-rules.js"></script>
+<script>window.addEventListener("error",function(e){const m=document.getElementById("connectorMessage");if(m)m.textContent="Page script error: "+(e.message||"JavaScript failed to start")+". Please refresh; if it continues, report this message.";});</script>
 <script>
 const $=id=>document.getElementById(id);let trucks=[],nextId=1,confirmedId=null;
 try{trucks=JSON.parse(localStorage.getItem("prototypeTruckOptions")||"[]");}catch(e){trucks=[]}
