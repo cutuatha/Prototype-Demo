@@ -1,30 +1,34 @@
 # Prototype live truck-search setup (free-only)
 
-This adds an optional live-search connector to the public Prototype demo. It does not modify the private repository. The search API and Cloudflare Workers have free tiers, but their limits and terms can change. This setup does not require a paid plan; do not enable billing or add a payment method.
+This connector adds an optional live web-search route to the public Prototype demo. The private Prototype repository is not involved. TinyFish Search/Fetch and Cloudflare Workers have free tiers; limits and terms can change. Do not enable paid features, add a payment method, or fund a TinyFish wallet.
 
 ## What this enables
 
-- Live web search results shown in the game after the free connector is deployed.
-- TruckPaper searched first, with Machinery Pete and MyLittleSalesman as additional sources.
-- Search result titles, snippets, source domains, and original links shown inside Prototype.
-- The browser still needs to screen for a clearly published fixed asking price and auction status. Search snippets alone do not prove either fact; a result must not be treated as verified seller inventory.
+- Live search results inside the game after the connector is deployed.
+- TruckPaper, Machinery Pete, and MyLittleSalesman as selectable search sources.
+- Search titles, snippets, source names, and original links returned to the page.
+- Preliminary asking-price and auction screening in the browser.
 
-## One-time setup required
+## Security first
 
-The game cannot safely hold the TinyFish API key in its public HTML. The key must be stored as a secret in a server-side Worker. No account credentials or API keys should be committed to GitHub.
+An API key was shared in chat. **Revoke that key and create a replacement before deploying this connector.** Do not paste the replacement into chat, HTML, or GitHub. Store it only as the Cloudflare Worker Secret described below.
 
-1. Create a free TinyFish account at https://agent.tinyfish.ai/ and create an API key. Its Search and Fetch services are advertised as free within published limits. Do not fund the wallet or enable paid Agent/Browser operations.
-2. Create a free Cloudflare account at https://dash.cloudflare.com/ if you do not already have one.
-3. In Cloudflare, open **Workers & Pages** and create a Worker named `prototype-truck-search`.
-4. Replace the starter Worker code with the contents of `truck-search-worker.js` from this repository, then deploy it.
-5. In the Worker settings, add a **Secret** named `TINYFISH_API_KEY` and paste the key there. Do not put the key in the game's HTML or into a GitHub file. Redeploy if Cloudflare asks.
-6. Copy the Worker URL (it looks like `https://prototype-truck-search.<your-subdomain>.workers.dev`). Enter that URL in the live-search connector field on the truck-selection page and save it in that browser.
+## One-time setup
 
-The Worker only accepts calls from `https://cutuatha.github.io` and only allows the three configured marketplace domains. If you use a different GitHub Pages origin, the Worker allowlist must be changed accordingly.
+1. Sign in at https://agent.tinyfish.ai/ and create a replacement API key. TinyFish Search and Fetch are listed as free and do not require a credit card. Do not fund the wallet or use metered Agent/Browser endpoints.
+2. Sign in or create a free account at https://dash.cloudflare.com/.
+3. Open **Workers & Pages** and create a Worker named `prototype-truck-search`.
+4. Replace the starter code with the full contents of `truck-search-worker.js` from this repository, then deploy.
+5. In the Worker settings, add a **Secret** named `TINYFISH_API_KEY` and paste the replacement key directly into that secret field. Do not commit it to GitHub. Keep the account on the Free plan.
+6. Copy the Worker URL (for example, `https://prototype-truck-search.<your-subdomain>.workers.dev`).
+7. Open https://cutuatha.github.io/Prototype-Demo/truck-selection.html, paste the Worker URL into **Live search connector**, and choose **Save connector URL**. Use **Test connection** to verify.
+
+The Worker only allows browser requests from `https://cutuatha.github.io` and accepts the three configured marketplace domains. CORS is not authentication or abuse protection; this is a public demo connector, so keep queries short and do not expose the API key.
 
 ## Important limitations
 
-- This is a search integration, not a guaranteed inventory feed. Search engines may omit listings, return stale pages, or show snippets without price.
-- A result must be opened at its source and checked for a fixed asking price, non-auction status, and current availability before it is entered as a listing.
-- Search is free only within TinyFish's current published allowance. The Worker is on Cloudflare's free plan; keep the account on Free and do not enable paid features.
-- The Worker proxy code is a scaffold until it has been deployed and connected to the page. It has not been live-tested from this repository.
+- The connector calls TinyFish Search's documented GET endpoint and scopes each search with a `site:` query. It does not use unsupported `include_domains` parameters.
+- This is a web search, not a guaranteed marketplace inventory feed. Search may return stale snippets, category pages, auction results, or listings without a published asking price.
+- Prototype's price/auction screening is preliminary. Open the original seller page to verify the current fixed price, non-auction status, availability, location, and truck details before selecting a truck.
+- Search and Fetch are free within TinyFish's published limits; Cloudflare Workers usage must remain within the Free plan. No paid APIs, paid hosting, or automatic paid upgrades are part of this setup.
+- The connector code is not live-deployed or tested from Cloudflare yet. The setup requires the account owner to create the Worker and add the secret.
