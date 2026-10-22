@@ -5,13 +5,13 @@
 "use strict";
 const REGISTRY = {
   id:"prototype-core-rules",
-  version:"0.1.0",
+  version:"0.1.1",
   updated:"2026-10-21",
   description:"Canonical record of approved Prototype design requirements and implementation status.",
   rules:[
-    {id:"EQ-001",area:"Equipment search",title:"Price-first truck search",status:"approved_design",implementation:"not_yet_enforced",rule:"Truck asking-price range is the primary search criterion. Minimum price is optional; maximum price is required. Values must be nonnegative, and minimum cannot exceed maximum."},
-    {id:"EQ-002",area:"Equipment search",title:"Manufacturer multi-select",status:"approved_design",implementation:"not_yet_enforced",rule:"Allow multiple manufacturers. Default is all manufacturers; no model is required. Model is an optional filter."},
-    {id:"EQ-003",area:"Equipment search",title:"Exclude unpriced and auction listings",status:"approved_design",implementation:"not_yet_enforced",rule:"Exclude listings without a published asking price and exclude auction listings from truck-search results."},
+    {id:"EQ-001",area:"Equipment search",title:"Price-first truck search",status:"approved_design",implementation:"partial",rule:"Truck asking-price range is the primary search criterion. Minimum price is optional; maximum price is required. Values must be nonnegative, and minimum cannot exceed maximum. The page validates the requested range and entered listing price, but marketplace result pages are external and are not automatically imported or guaranteed to obey filters."},
+    {id:"EQ-002",area:"Equipment search",title:"Manufacturer multi-select",status:"approved_design",implementation:"partial",rule:"Allow multiple manufacturers. Default is all manufacturers; no model is required. Model is an optional filter. The page builds a multi-brand search query, but the external search provider controls the returned results."},
+    {id:"EQ-003",area:"Equipment search",title:"Exclude unpriced and auction listings",status:"approved_design",implementation:"partial",rule:"Exclude listings without a published asking price and exclude auction listings from truck-search results. The entry form rejects auction and unpriced listings; external marketplace results must still be checked because they are not imported or automatically screened."},
     {id:"EQ-004",area:"Equipment search",title:"Real listing transparency",status:"approved_design",implementation:"partial",rule:"Use actual accessible listings when possible, identify their source, and never present simulated listings as real seller advertisements. Static pages may need an external search service to import listings."},
     {id:"EQ-005",area:"Equipment selection",title:"Compare and select controls",status:"approved_design",implementation:"partial",rule:"Each equipment listing has an identifying ID, a persistent Compare to Others control, and Select Now. Select Now requires explicit confirmation and does not authorize purchase, financing, funds commitment, or acquisition."},
     {id:"EQ-006",area:"Equipment selection",title:"Truck before trailer",status:"approved_design",implementation:"partial",rule:"Do not proceed to trailer selection until the owner explicitly confirms a truck. Never infer confirmation."},
