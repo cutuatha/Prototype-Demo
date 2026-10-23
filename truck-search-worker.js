@@ -54,7 +54,7 @@ export default {
     const explicitlyFocused = makeNames.some((make) => lowerQuery.includes(make.toLowerCase()));
     const queryTexts = explicitlyFocused
       ? [rawQuery]
-      : [rawQuery, ...makeNames.map((make) => make + " semi truck for sale used")];
+      : [rawQuery, ...makeNames.map((make) => make + " " + rawQuery)];
 
     const uniqueResults = new Map();
     const searches = queryTexts.map(async (text) => {
