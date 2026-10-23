@@ -46,47 +46,67 @@ export default {
     if (!ALLOWED_DOMAINS.has(domain)) return json({ error: "Unsupported marketplace domain." }, 400, origin);
     if (!rawQuery) return json({ error: "Search query is required." }, 400, origin);
 
-    // TinyFish Search scopes by query text; include_domains is not a supported parameter.
-    const query = "site:" + domain + " " + rawQuery;
-    const url = new URL("https://api.search.tinyfish.ai/");
-    url.searchParams.set("query", query);
-    url.searchParams.set("location", "US");
-    url.searchParams.set("language", "en");
-    url.searchParams.set("page", "0");
+    // Run a broad query plus make-specific queries when no make is selected.
+    // This reduces the chance that one provider ranking (such as Peterbilt 379)
+    // dominates results. Explicit make searches remain focused.
+    const makeNames = ["Peterbilt", "Kenworth", "Freightliner", "International", "Volvo", "Western Star", "Mack"];
+    const lowerQuery = rawQuery.toLowerCase();
+    const explicitlyFocused = makeNames.some((make) => lowerQuery.includes(make.toLowerCase()));
+    const queryTexts = explicitlyFocused
+      ? [rawQuery]
+      : [rawQuery, ...makeNames.map((make) => make + " semi truck for sale used")];
 
-    try {
+    const uniqueResults = new Map();
+    const searches = queryTexts.map(async (text) => {
+      const query = "site:" + domain + " " + text;
+      const url = new URL("https://api.search.tinyfish.ai/");
+      url.searchParams.set("query", query);
+      url.searchParams.set("location", "US");
+      url.searchParams.set("language", "en");
+      url.searchParams.set("page", "0");
       const upstream = await fetch(url.toString(), {
         headers: { "X-API-Key": env.TINYFISH_API_KEY, "Accept": "application/json" },
       });
       const payload = await upstream.json().catch(() => ({}));
-      if (!upstream.ok) {
-        return json({ error: "Search provider returned HTTP " + upstream.status + ".", providerStatus: upstream.status }, upstream.status, origin);
+      if (!upstream.ok) throw new Error("Search provider returned HTTP " + upstream.status + ".");
+      const results = Array.isArray(payload.results) ? payload.results : [];
+      return { query, results, totalResults: Number(payload.total_results || results.length) };
+    });
+
+    try {
+      const batches = await Promise.all(searches);
+      for (const batch of batches) {
+        for (const r of batch.results) {
+          let resultUrl = String(r.url || "");
+          if (resultUrl && !/^https:\/\//i.test(resultUrl)) resultUrl = "https://" + resultUrl.replace(/^\/+/, "");
+          let host = "";
+          try { host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, ""); } catch {}
+          if (!(host === domain || host.endsWith("." + domain)) || !resultUrl.startsWith("https://") || !r.title) continue;
+          const key = resultUrl.split("#")[0].replace(/\/$/, "").toLowerCase();
+          if (!uniqueResults.has(key)) uniqueResults.set(key, {
+            title: String(r.title || ""),
+            snippet: String(r.snippet || ""),
+            url: resultUrl,
+            source: String(r.site_name || domain),
+            date: r.date ? String(r.date) : "",
+            isListingPage: true,
+            matchedQuery: batch.query,
+          });
+        }
       }
-      const results = Array.isArray(payload.results) ? payload.results.map((r) => {
-        let resultUrl = String(r.url || "");
-        if (resultUrl && !/^https:\/\//i.test(resultUrl)) resultUrl = "https://" + resultUrl.replace(/^\/+/, "");
-        let host = "";
-        try { host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, ""); } catch {}
-        return {
-          title: String(r.title || ""),
-          snippet: String(r.snippet || ""),
-          url: resultUrl,
-          source: String(r.site_name || domain),
-          date: r.date ? String(r.date) : "",
-          isListingPage: host === domain || host.endsWith("." + domain),
-        };
-      }).filter((r) => r.isListingPage && r.url.startsWith("https://") && r.title) : [];
+      const results = [...uniqueResults.values()];
       return json({
-        query,
+        query: queryTexts.length === 1 ? "site:" + domain + " " + queryTexts[0] : "diversified marketplace search",
         domain,
         results,
-        totalResults: Number(payload.total_results || results.length),
+        totalResults: batches.reduce((sum, b) => sum + b.totalResults, 0),
+        searchCount: batches.length,
         provider: "TinyFish Search",
         retrievedAt: new Date().toISOString(),
         note: "Search results are not verified inventory. Confirm the original listing, fixed asking price, auction status, and availability.",
       }, 200, origin);
-    } catch {
-      return json({ error: "Could not reach the search provider. Try again later." }, 502, origin);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Search provider failed." }, 502, origin);
     }
   },
 };
