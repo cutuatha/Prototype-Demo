@@ -8,7 +8,10 @@ const ALLOWED_DOMAINS = new Set([
   "truckpaper.com",
   "machinerypete.com",
   "mylittlesalesman.com",
+  "tmctrucksales.com",
+  "deckertrucksales.com",
 ]);
+const SEARCH_DOMAINS = [...ALLOWED_DOMAINS];
 
 function json(data, status = 200, origin = "") {
   const headers = {
@@ -41,9 +44,10 @@ export default {
 
     let input;
     try { input = await request.json(); } catch { return json({ error: "Request body must be JSON." }, 400, origin); }
-    const domain = String(input.domain || "").toLowerCase().replace(/^www\./, "");
+    const requestedDomain = String(input.domain || "").toLowerCase().replace(/^www\./, "");
     const rawQuery = String(input.query || "").trim().slice(0, 600);
-    if (!ALLOWED_DOMAINS.has(domain)) return json({ error: "Unsupported marketplace domain." }, 400, origin);
+    const domains = requestedDomain === "all" ? SEARCH_DOMAINS : [requestedDomain];
+    if (domains.some((d) => !ALLOWED_DOMAINS.has(d))) return json({ error: "Unsupported marketplace domain." }, 400, origin);
     if (!rawQuery) return json({ error: "Search query is required." }, 400, origin);
 
     // Run a broad query plus make-specific queries when no make is selected.
@@ -58,7 +62,7 @@ export default {
 
     const uniqueResults = new Map();
     const searches = queryTexts.map(async (text) => {
-      const query = "site:" + domain + " " + text;
+      const query = "(" + domains.map((d) => "site:" + d).join(" OR ") + ") " + text;
       const url = new URL("https://api.search.tinyfish.ai/");
       url.searchParams.set("query", query);
       url.searchParams.set("location", "US");
@@ -81,13 +85,13 @@ export default {
           if (resultUrl && !/^https:\/\//i.test(resultUrl)) resultUrl = "https://" + resultUrl.replace(/^\/+/, "");
           let host = "";
           try { host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, ""); } catch {}
-          if (!(host === domain || host.endsWith("." + domain)) || !resultUrl.startsWith("https://") || !r.title) continue;
+          if (!domains.some((d) => host === d || host.endsWith("." + d)) || !resultUrl.startsWith("https://") || !r.title) continue;
           const key = resultUrl.split("#")[0].replace(/\/$/, "").toLowerCase();
           if (!uniqueResults.has(key)) uniqueResults.set(key, {
             title: String(r.title || ""),
             snippet: String(r.snippet || ""),
             url: resultUrl,
-            source: String(r.site_name || domain),
+            source: String(r.site_name || host),
             date: r.date ? String(r.date) : "",
             isListingPage: true,
             matchedQuery: batch.query,
@@ -96,8 +100,9 @@ export default {
       }
       const results = [...uniqueResults.values()];
       return json({
-        query: queryTexts.length === 1 ? "site:" + domain + " " + queryTexts[0] : "diversified marketplace search",
-        domain,
+        query: queryTexts.length === 1 ? "(" + domains.map((d) => "site:" + d).join(" OR ") + ") " + queryTexts[0] : "diversified multi-source truck search",
+        domain: requestedDomain,
+        searchedDomains: domains,
         results,
         totalResults: batches.reduce((sum, b) => sum + b.totalResults, 0),
         searchCount: batches.length,
