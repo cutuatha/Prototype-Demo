@@ -61,8 +61,11 @@ export default {
       : [rawQuery, ...makeNames.map((make) => make + " " + rawQuery)];
 
     const uniqueResults = new Map();
-    const searches = queryTexts.map(async (text) => {
-      const query = "(" + domains.map((d) => "site:" + d).join(" OR ") + ") " + text;
+    // Search each marketplace separately instead of combining five site: filters
+    // into one query. Search engines often let one domain dominate a combined query,
+    // which made the UI claim "all sources" while returning only one marketplace.
+    const searches = domains.flatMap((domain) => queryTexts.map(async (text) => {
+      const query = "site:" + domain + " " + text;
       const url = new URL("https://api.search.tinyfish.ai/");
       url.searchParams.set("query", query);
       url.searchParams.set("location", "US");
@@ -72,10 +75,10 @@ export default {
         headers: { "X-API-Key": env.TINYFISH_API_KEY, "Accept": "application/json" },
       });
       const payload = await upstream.json().catch(() => ({}));
-      if (!upstream.ok) throw new Error("Search provider returned HTTP " + upstream.status + ".");
+      if (!upstream.ok) throw new Error("Search provider returned HTTP " + upstream.status + " for " + domain + ".");
       const results = Array.isArray(payload.results) ? payload.results : [];
-      return { query, results, totalResults: Number(payload.total_results || results.length) };
-    });
+      return { domain, query, results, totalResults: Number(payload.total_results || results.length) };
+    }));
 
     try {
       const batches = await Promise.all(searches);
@@ -100,7 +103,7 @@ export default {
       }
       const results = [...uniqueResults.values()];
       return json({
-        query: queryTexts.length === 1 ? "(" + domains.map((d) => "site:" + d).join(" OR ") + ") " + queryTexts[0] : "diversified multi-source truck search",
+        query: "separate marketplace searches (" + domains.join(", ") + ")",
         domain: requestedDomain,
         searchedDomains: domains,
         results,
