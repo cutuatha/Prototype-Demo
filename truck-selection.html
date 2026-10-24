@@ -95,14 +95,14 @@ const unpricedByUrl=new Map();
 for(const r of data.results||[]){
   if(parsePrice((r.title||"")+" "+(r.snippet||""))!==null)continue;
   let u;try{u=new URL(r.url||"");}catch{continue;}
-  const host=u.hostname.toLowerCase().replace(/^www\\./,"");
-  const path=u.pathname.replace(/\\/+$/,"");
+  const host=u.hostname.toLowerCase().replace(/^www\./,"");
+  const path=u.pathname.replace(/\/+$/,"");
   const allowedHosts=["truckpaper.com","machinerypete.com","mylittlesalesman.com","tmctrucksales.com","deckertrucksales.com"];
   const sourceAllowed=allowedHosts.some(d=>host===d||host.endsWith("."+d));
-  const genericTitle=/^(truck ?paper|machinery pete|my ?little ?salesman|tmc truck sales|decker truck( and trailer)? sales)(\\s*[-|:].*)?$/i.test((r.title||"").trim());
-  const genericPath=/\\/(inventory|all-inventory|search|results|trucks-for-sale|semi-trucks-trailers)\\/?$/i.test(path)||path===""||path==="/";
-  const categoryPage=/\\b(for sale|cabs? & shells|water trucks|truck parts|engines? for sale|parts for sale|remanufactured|browse .* inventory)\\b/i.test(r.title||"")&&! /\\b(19[89]\\d|20[0-3]\\d)\\b/.test(r.title||"");
-  const partsOnly=/\\b(remanufactured|engine parts|truck cabs? & shells|caterpillar c\\d+ engines?)\\b/i.test(r.title||"");
+  const genericTitle=/^(truck ?paper|machinery pete|my ?little ?salesman|tmc truck sales|decker truck( and trailer)? sales)(\s*[-|:].*)?$/i.test((r.title||"").trim());
+  const genericPath=/\/(inventory|all-inventory|search|results|trucks-for-sale|semi-trucks-trailers)\/?$/i.test(path)||path===""||path==="/";
+  const categoryPage=/\b(for sale|cabs? & shells|water trucks|truck parts|engines? for sale|parts for sale|remanufactured|browse .* inventory)\b/i.test(r.title||"")&&! /\b(19[89]\d|20[0-3]\d)\b/.test(r.title||"");
+  const partsOnly=/\b(remanufactured|engine parts|truck cabs? & shells|caterpillar c\d+ engines?)\b/i.test(r.title||"");
   const auction=/auction|bidding|bid now|starting bid|reserve not met/i.test((r.title||"")+" "+(r.snippet||""));
   if(!sourceAllowed||genericTitle||genericPath||categoryPage||partsOnly||auction||!String(r.url||"").startsWith("https://"))continue;
   const key=normalizeListingUrl(r.url);
