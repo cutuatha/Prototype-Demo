@@ -3,7 +3,10 @@
  * Store TINYFISH_API_KEY as a Cloudflare Worker Secret. Never commit the key.
  * TinyFish Search and Fetch have free tiers; do not use metered Agent/Browser endpoints.
  */
-const ALLOWED_ORIGINS = new Set(["https://cutuatha.github.io"]);
+const ALLOWED_ORIGINS = new Set([
+  "https://cutuatha.github.io",
+  "https://prototype-truck-listings-preview-rqngrm.v2.appdeploy.ai",
+]);
 const ALLOWED_DOMAINS = new Set([
   "truckpaper.com",
   "machinerypete.com",
