@@ -60,7 +60,7 @@ export default {
     // price, location, and exclusion terms that public search engines treat too
     // literally. Keep the original query, then search simpler model-led phrases.
     const makeInQuery = makeNames.find((make) => lowerQuery.includes(make.toLowerCase()));
-    const yearMatch = rawQuery.match(/\\b(?:19[89]\\d|20[0-3]\\d)\\b/);
+    const yearMatch = rawQuery.match(/\b(?:19[89]\d|20[0-3]\d)\b/);
     const modelMatch = makeInQuery
       ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length).match(/^\s+([a-z0-9-]+)/i)
       : null;
