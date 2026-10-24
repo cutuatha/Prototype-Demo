@@ -20,11 +20,11 @@ function json(data, status = 200, origin = "") {
   const headers = {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type",
     "vary": "Origin",
   };
-  if (origin && ALLOWED_ORIGINS.has(origin)) headers["access-control-allow-origin"] = origin;
   return new Response(JSON.stringify(data), { status, headers });
 }
 
@@ -32,17 +32,27 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS") {
-      if (!ALLOWED_ORIGINS.has(origin)) return new Response(null, { status: 403 });
       return new Response(null, { status: 204, headers: {
-        "access-control-allow-origin": origin,
-        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
         "access-control-allow-headers": "content-type",
         "access-control-max-age": "86400",
         "vary": "Origin",
       }});
     }
-    if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: "Origin not allowed." }, 403, origin);
-    if (request.method !== "POST") return json({ error: "Use POST." }, 405, origin);
+    // A GET health check makes it possible to distinguish a deployed Worker
+    // from a missing route or stale deployment without calling the paid/provider API.
+    if (request.method === "GET") {
+      return json({
+        ok: true,
+        service: "Prototype truck-search Worker",
+        providerConfigured: Boolean(env.TINYFISH_API_KEY),
+        message: env.TINYFISH_API_KEY
+          ? "Worker is running; provider secret is present."
+          : "Worker is running, but TINYFISH_API_KEY secret is missing."
+      }, env.TINYFISH_API_KEY ? 200 : 503, origin);
+    }
+    if (request.method !== "POST") return json({ error: "Use GET for health check or POST for search." }, 405, origin);
     if (!env.TINYFISH_API_KEY) return json({ error: "Worker is missing its TINYFISH_API_KEY secret." }, 503, origin);
 
     let input;
