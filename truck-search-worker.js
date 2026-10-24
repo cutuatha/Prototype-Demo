@@ -71,6 +71,41 @@ async function tinyfishSearch(query, apiKey) {
   throw new Error(lastError || "TinyFish Search failed.");
 }
 
+
+async function tinyfishFetchPages(urls, apiKey) {
+  if (!urls.length) return { results: [], errors: [] };
+
+  const response = await fetch("https://api.fetch.tinyfish.ai", {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      urls,
+      format: "markdown",
+      ttl: 0,
+      purpose: "Extract factual details from individual used semi-truck seller listings, including fixed asking price, year, make/model, mileage, engine, transmission, sleeper, location, seller, and availability. Do not infer missing facts.",
+    }),
+  });
+
+  const bodyText = await response.text();
+  let payload = {};
+  try { payload = JSON.parse(bodyText); } catch {}
+
+  if (!response.ok) {
+    const detail = bodyText.slice(0, 300).replace(/\s+/g, " ").trim();
+    throw new Error("TinyFish Fetch returned HTTP " + response.status +
+      (detail ? ": " + detail : "."));
+  }
+
+  return {
+    results: Array.isArray(payload.results) ? payload.results : [],
+    errors: Array.isArray(payload.errors) ? payload.errors : [],
+  };
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -247,6 +282,66 @@ export default {
 
     const results = [...uniqueResults.values()];
 
+    // Search results are leads, not verified listings. Fetch individual pages
+    // where possible so the client can distinguish seller-page text from
+    // search snippets. Anti-bot blocks are recorded per URL and do not discard
+    // otherwise useful search results.
+    const pageFetchErrors = [];
+    const fetchBatch = results.slice(0, 10);
+    const normalizeUrl = (raw) => {
+      try {
+        const url = new URL(raw);
+        url.hash = "";
+        url.search = "";
+        url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+        return url.origin + url.pathname.replace(/\/$/, "");
+      } catch {
+        return String(raw || "").split(/[?#]/)[0].replace(/\/$/, "");
+      }
+    };
+    for (const result of results) {
+      result.pageFetchStatus = "not_attempted_limit";
+      result.pageText = "";
+      result.pageTitle = "";
+      result.pageFetchError = "";
+    }
+    if (fetchBatch.length) {
+      try {
+        const fetched = await tinyfishFetchPages(
+          fetchBatch.map((result) => result.url),
+          env.TINYFISH_API_KEY
+        );
+        const fetchedByUrl = new Map(
+          fetched.results.map((page) => [normalizeUrl(page.url), page])
+        );
+        const errorsByUrl = new Map(
+          fetched.errors.map((error) => [normalizeUrl(error.url), String(error.error || "fetch_failed")])
+        );
+
+        for (const result of fetchBatch) {
+          const key = normalizeUrl(result.url);
+          const page = fetchedByUrl.get(key);
+          const error = errorsByUrl.get(key);
+          if (page && typeof page.text === "string" && page.text.trim()) {
+            result.pageFetchStatus = "retrieved";
+            result.pageText = page.text.slice(0, 30000);
+            result.pageTitle = String(page.title || "");
+          } else {
+            result.pageFetchStatus = "blocked_or_unavailable";
+            result.pageFetchError = error || "No page text returned";
+            pageFetchErrors.push({ url: result.url, error: result.pageFetchError });
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        for (const result of fetchBatch) {
+          result.pageFetchStatus = "fetch_service_error";
+          result.pageFetchError = message;
+        }
+        pageFetchErrors.push({ error: message });
+      }
+    }
+
     if (results.length === 0 && failedDomains.length > 0) {
       return json({
         error: "TinyFish Search failed for every marketplace. The detailed provider error is included below.",
@@ -264,7 +359,9 @@ export default {
       totalResults,
       searchCount,
       failedDomains,
-      provider: "TinyFish Search",
+      pageFetchErrors,
+      pageFetchCount: fetchBatch.length,
+      provider: "TinyFish Search + Fetch",
       retrievedAt: new Date().toISOString(),
       note: "Search results are not verified inventory. Confirm the original listing, asking price, auction status, and availability.",
     });
