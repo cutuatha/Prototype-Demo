@@ -46,7 +46,7 @@ try {
     // Prefer the unique marketplace listing ID. If the old record lost its URL,
     // accept only a clearly identified 2012 Peterbilt 386 from this marketplace.
     if (/14453004/.test(rawUrl)) return true;
-    const clearlySameTruck = /\\b2012\\b/i.test(name) && /\\bPeterbilt\\b/i.test(name) && /\\b386\\b/i.test(name);
+    const clearlySameTruck = /2012/i.test(name) && /Peterbilt/i.test(name) && /386/i.test(name);
     const marketplaceMatch = /mylittlesalesman/i.test(rawUrl) || /mylittlesalesman/i.test(source);
     return clearlySameTruck && marketplaceMatch;
   });
