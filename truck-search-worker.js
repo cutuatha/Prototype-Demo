@@ -62,7 +62,7 @@ export default {
     const makeInQuery = makeNames.find((make) => lowerQuery.includes(make.toLowerCase()));
     const yearMatch = rawQuery.match(/\\b(?:19[89]\\d|20[0-3]\\d)\\b/);
     const modelMatch = makeInQuery
-      ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length).match(/^\\s+([a-z0-9-]+)/i)
+      ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length).match(/^\s+([a-z0-9-]+)/i)
       : null;
     const model = modelMatch ? modelMatch[1] : "";
     const year = yearMatch ? yearMatch[0] : "";
