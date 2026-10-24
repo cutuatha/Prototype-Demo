@@ -151,14 +151,27 @@ export default {
 
     // Search each marketplace separately. Keep failures isolated so one provider
     // error (for example, TruckPaper returning 502) does not discard other results.
-    const domainRuns = await Promise.all(domains.map(async (domain) => {
+    const domainRuns = [];
+    let providerRateLimitError = "";
+    let requestMade = false;
+
+    // Run marketplace searches sequentially to avoid bursting the provider.
+    // Stop immediately on HTTP 429 because it means the provider is rate-limiting
+    // this account; sending more requests would make the problem worse.
+    for (const domain of domains) {
       const domainResults = [];
       let domainTotal = 0;
       let completedQueries = 0;
       let lastError = "";
 
       for (const text of queryTexts) {
+        if (requestMade) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+
         const query = "site:" + domain + " " + text;
+        requestMade = true;
+
         try {
           const batch = await tinyfishSearch(query, env.TINYFISH_API_KEY);
           completedQueries++;
@@ -173,6 +186,7 @@ export default {
             try {
               host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, "");
             } catch {}
+
             if (
               !(host === domain || host.endsWith("." + domain)) ||
               !resultUrl.startsWith("https://") ||
@@ -189,22 +203,37 @@ export default {
               matchedQuery: query,
             });
           }
-          // Avoid extra provider requests once this domain has returned listings.
+
           if (domainResults.length >= 5) break;
         } catch (error) {
           lastError = error instanceof Error ? error.message : String(error);
-          // Continue to the next simpler query; a single failed query is not fatal.
+          if (/HTTP 429\b/.test(lastError)) {
+            providerRateLimitError = lastError;
+            break;
+          }
         }
       }
 
-      return {
+      domainRuns.push({
         domain,
         results: domainResults,
         totalResults: domainTotal,
         searchCount: completedQueries,
         error: completedQueries === 0 ? lastError : "",
-      };
-    }));
+      });
+
+      if (providerRateLimitError) break;
+    }
+
+    if (providerRateLimitError) {
+      return json({
+        error: "TinyFish Search is rate-limiting requests (HTTP 429). The Worker has stopped sending more requests to avoid worsening the limit.",
+        providerError: providerRateLimitError,
+        searchedDomains: domainRuns.map((run) => run.domain),
+        searchCount: domainRuns.reduce((sum, run) => sum + run.searchCount, 0),
+        guidance: "Wait for the TinyFish Search rate limit or quota to reset, then retry. If it persists, check the TinyFish account's Search API quota and rate limits.",
+      }, 429);
+    }
 
     for (const run of domainRuns) {
       totalResults += run.totalResults;
