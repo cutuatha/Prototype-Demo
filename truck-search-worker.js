@@ -56,8 +56,24 @@ export default {
     const makeNames = ["Peterbilt", "Kenworth", "Freightliner", "International", "Volvo", "Western Star", "Mack"];
     const lowerQuery = rawQuery.toLowerCase();
     const explicitlyFocused = makeNames.some((make) => lowerQuery.includes(make.toLowerCase()));
+    // Focused searches still need wording variants: exact UI filters often include
+    // price, location, and exclusion terms that public search engines treat too
+    // literally. Keep the original query, then search simpler model-led phrases.
+    const makeInQuery = makeNames.find((make) => lowerQuery.includes(make.toLowerCase()));
+    const yearMatch = rawQuery.match(/\\b(?:19[89]\\d|20[0-3]\\d)\\b/);
+    const modelMatch = makeInQuery
+      ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length).match(/^\\s+([a-z0-9-]+)/i)
+      : null;
+    const model = modelMatch ? modelMatch[1] : "";
+    const year = yearMatch ? yearMatch[0] : "";
     const queryTexts = explicitlyFocused
-      ? [rawQuery]
+      ? [...new Set([
+          rawQuery,
+          [year, makeInQuery, model, "sleeper"].filter(Boolean).join(" "),
+          [makeInQuery, model, "used semi truck for sale"].filter(Boolean).join(" "),
+          [makeInQuery, model, "sleeper tractor truck"].filter(Boolean).join(" "),
+          [makeInQuery, "used sleeper semi truck for sale"].filter(Boolean).join(" "),
+        ])]
       : [rawQuery, ...makeNames.map((make) => make + " " + rawQuery)];
 
     const uniqueResults = new Map();
