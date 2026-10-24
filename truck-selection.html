@@ -34,6 +34,34 @@ const $=id=>document.getElementById(id);let trucks=[],nextId=1,confirmedId=null;
 try{trucks=JSON.parse(localStorage.getItem("prototypeTruckOptions")||"[]");}catch(e){trucks=[]}
 try{nextId=Math.max(1,Number(localStorage.getItem("prototypeTruckNextId"))||1, ...trucks.map(t=>Number(String(t.id).replace(/\D/g,""))+1));}catch(e){}
 try{confirmedId=localStorage.getItem("prototypeTruckConfirmedId");}catch(e){}
+
+// One-time migration for the Peterbilt 386 listing already evaluated in this demo.
+// Match by marketplace listing ID, update only known facts, and preserve compare/selection flags.
+try {
+  const knownUrl = "https://www.mylittlesalesman.com/2012-peterbilt-386-sleeper-semi-truck-mid-roof-sleeper-paccar-490hp-13-speed-manual-14453004";
+  const known = trucks.find(t => {
+    try { return /14453004/.test(new URL(t.url || "").pathname); } catch(e) { return false; }
+  });
+  if (known) {
+    known.year = known.year || "2012";
+    known.name = "Peterbilt 386 — Mid Roof Sleeper";
+    known.engine = "PACCAR MX, 490 HP";
+    known.transmission = "Eaton manual, 13-speed";
+    known.mileage = known.mileage || 756733;
+    known.location = known.location || "Paul, Idaho";
+    known.price = 16000;
+    known.priceVerified = true;
+    known.availabilityStatus = "unclear";
+    known.source = known.source || "MyLittleSalesman";
+    known.url = known.url || knownUrl;
+    const facts = "Seller-page details previously supplied by the user: BTR Sales; used truck; 6x4; 3.42 gear ratio; mid-roof sleeper; red; air ride; tandem axle; 244-inch wheelbase; aluminum wheels; 295/75R22.5 tires; cruise control; tires reported 80% and better; sliding fifth wheel. Asking price $16,000 USD was user-confirmed as fixed on the seller page. Availability remains unclear/not confirmed.";
+    if (!String(known.notes || "").includes("Seller-page details previously supplied by the user")) {
+      known.notes = [known.notes, facts].filter(Boolean).join("\n");
+    }
+    persist();
+  }
+} catch(e) { /* Keep the page usable if a saved record has an unexpected shape. */ }
+
 function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll(String.fromCharCode(34),"&quot;").replaceAll(String.fromCharCode(39),"&#39;");}
 function persist(){localStorage.setItem("prototypeTruckOptions",JSON.stringify(trucks));localStorage.setItem("prototypeTruckNextId",String(nextId));if(confirmedId)localStorage.setItem("prototypeTruckConfirmedId",confirmedId);else localStorage.removeItem("prototypeTruckConfirmedId");}
 function selectedMakes(){return [...document.querySelectorAll('input[name="makeFilter"]:checked')].map(x=>x.value);}
