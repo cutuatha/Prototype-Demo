@@ -1,12 +1,8 @@
 /**
- * Prototype free truck-search proxy for Cloudflare Workers.
- * Store TINYFISH_API_KEY as a Cloudflare Worker Secret. Never commit the key.
- * TinyFish Search and Fetch have free tiers; do not use metered Agent/Browser endpoints.
+ * Prototype truck-search proxy for Cloudflare Workers.
+ * Set TINYFISH_API_KEY as a Cloudflare Worker Secret.
+ * Never put the API key directly in this file.
  */
-const ALLOWED_ORIGINS = new Set([
-  "https://cutuatha.github.io",
-  "https://prototype-truck-listings-preview-rqngrm.v2.appdeploy.ai",
-]);
 const ALLOWED_DOMAINS = new Set([
   "truckpaper.com",
   "machinerypete.com",
@@ -16,134 +12,232 @@ const ALLOWED_DOMAINS = new Set([
 ]);
 const SEARCH_DOMAINS = [...ALLOWED_DOMAINS];
 
-function json(data, status = 200, origin = "") {
-  const headers = {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type",
-    "vary": "Origin",
-  };
-  return new Response(JSON.stringify(data), { status, headers });
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "content-type",
+    },
+  });
+}
+
+async function tinyfishSearch(query, apiKey) {
+  const url = new URL("https://api.search.tinyfish.ai/");
+  url.searchParams.set("query", query);
+  url.searchParams.set("location", "US");
+  url.searchParams.set("language", "en");
+  url.searchParams.set("page", "0");
+
+  // Retry one transient provider/server failure before giving up.
+  let lastError = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let response;
+    try {
+      response = await fetch(url.toString(), {
+        headers: {
+          "X-API-Key": apiKey,
+          "Accept": "application/json",
+        },
+      });
+    } catch (error) {
+      lastError = "Could not reach TinyFish Search: " +
+        (error instanceof Error ? error.message : String(error));
+      if (attempt === 0) continue;
+      throw new Error(lastError);
+    }
+
+    const bodyText = await response.text();
+    let payload = {};
+    try { payload = JSON.parse(bodyText); } catch {}
+
+    if (response.ok) {
+      return {
+        results: Array.isArray(payload.results) ? payload.results : [],
+        totalResults: Number(payload.total_results || 0),
+      };
+    }
+
+    const detail = bodyText.slice(0, 300).replace(/\s+/g, " ").trim();
+    lastError = "TinyFish Search returned HTTP " + response.status +
+      (detail ? ": " + detail : ".");
+    if (response.status < 500 || attempt === 1) {
+      throw new Error(lastError);
+    }
+  }
+  throw new Error(lastError || "TinyFish Search failed.");
 }
 
 export default {
   async fetch(request, env) {
-    const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: {
-        "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET, POST, OPTIONS",
-        "access-control-allow-headers": "content-type",
-        "access-control-max-age": "86400",
-        "vary": "Origin",
-      }});
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "content-type",
+          "access-control-max-age": "86400",
+        },
+      });
     }
-    // A GET health check makes it possible to distinguish a deployed Worker
-    // from a missing route or stale deployment without calling the paid/provider API.
+
     if (request.method === "GET") {
+      const configured = Boolean(env.TINYFISH_API_KEY);
       return json({
         ok: true,
         service: "Prototype truck-search Worker",
-        providerConfigured: Boolean(env.TINYFISH_API_KEY),
-        message: env.TINYFISH_API_KEY
+        providerConfigured: configured,
+        message: configured
           ? "Worker is running; provider secret is present."
-          : "Worker is running, but TINYFISH_API_KEY secret is missing."
-      }, env.TINYFISH_API_KEY ? 200 : 503, origin);
+          : "Worker is running, but TINYFISH_API_KEY secret is missing.",
+      }, configured ? 200 : 503);
     }
-    if (request.method !== "POST") return json({ error: "Use GET for health check or POST for search." }, 405, origin);
-    if (!env.TINYFISH_API_KEY) return json({ error: "Worker is missing its TINYFISH_API_KEY secret." }, 503, origin);
+
+    if (request.method !== "POST") {
+      return json({ error: "Use GET for health check or POST for search." }, 405);
+    }
+    if (!env.TINYFISH_API_KEY) {
+      return json({ error: "Worker is missing its TINYFISH_API_KEY secret." }, 503);
+    }
 
     let input;
-    try { input = await request.json(); } catch { return json({ error: "Request body must be JSON." }, 400, origin); }
+    try {
+      input = await request.json();
+    } catch {
+      return json({ error: "Request body must be JSON." }, 400);
+    }
+
     const requestedDomain = String(input.domain || "").toLowerCase().replace(/^www\./, "");
     const rawQuery = String(input.query || "").trim().slice(0, 600);
     const domains = requestedDomain === "all" ? SEARCH_DOMAINS : [requestedDomain];
-    if (domains.some((d) => !ALLOWED_DOMAINS.has(d))) return json({ error: "Unsupported marketplace domain." }, 400, origin);
-    if (!rawQuery) return json({ error: "Search query is required." }, 400, origin);
 
-    // Run a broad query plus make-specific queries when no make is selected.
-    // This reduces the chance that one provider ranking (such as Peterbilt 379)
-    // dominates results. Explicit make searches remain focused.
-    const makeNames = ["Peterbilt", "Kenworth", "Freightliner", "International", "Volvo", "Western Star", "Mack"];
+    if (domains.some((domain) => !ALLOWED_DOMAINS.has(domain))) {
+      return json({ error: "Unsupported marketplace domain." }, 400);
+    }
+    if (!rawQuery) {
+      return json({ error: "Search query is required." }, 400);
+    }
+
+    const makeNames = [
+      "Peterbilt", "Kenworth", "Freightliner", "International",
+      "Volvo", "Western Star", "Mack",
+    ];
     const lowerQuery = rawQuery.toLowerCase();
-    const explicitlyFocused = makeNames.some((make) => lowerQuery.includes(make.toLowerCase()));
-    // Focused searches still need wording variants: exact UI filters often include
-    // price, location, and exclusion terms that public search engines treat too
-    // literally. Keep the original query, then search simpler model-led phrases.
     const makeInQuery = makeNames.find((make) => lowerQuery.includes(make.toLowerCase()));
     const yearMatch = rawQuery.match(/\b(?:19[89]\d|20[0-3]\d)\b/);
     const modelMatch = makeInQuery
-      ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length).match(/^\s+([a-z0-9-]+)/i)
+      ? rawQuery.slice(lowerQuery.indexOf(makeInQuery.toLowerCase()) + makeInQuery.length)
+          .match(/^\s+([a-z0-9-]+)/i)
       : null;
     const model = modelMatch ? modelMatch[1] : "";
     const year = yearMatch ? yearMatch[0] : "";
-    const queryTexts = explicitlyFocused
+
+    const queryTexts = makeInQuery
       ? [...new Set([
           rawQuery,
           [year, makeInQuery, model, "sleeper"].filter(Boolean).join(" "),
           [makeInQuery, model, "used semi truck for sale"].filter(Boolean).join(" "),
-          [makeInQuery, model, "sleeper tractor truck"].filter(Boolean).join(" "),
-          [makeInQuery, "used sleeper semi truck for sale"].filter(Boolean).join(" "),
         ])]
       : [rawQuery, ...makeNames.map((make) => make + " " + rawQuery)];
 
     const uniqueResults = new Map();
-    // Search each marketplace separately instead of combining five site: filters
-    // into one query. Search engines often let one domain dominate a combined query,
-    // which made the UI claim "all sources" while returning only one marketplace.
-    const searches = domains.flatMap((domain) => queryTexts.map(async (text) => {
-      const query = "site:" + domain + " " + text;
-      const url = new URL("https://api.search.tinyfish.ai/");
-      url.searchParams.set("query", query);
-      url.searchParams.set("location", "US");
-      url.searchParams.set("language", "en");
-      url.searchParams.set("page", "0");
-      const upstream = await fetch(url.toString(), {
-        headers: { "X-API-Key": env.TINYFISH_API_KEY, "Accept": "application/json" },
-      });
-      const payload = await upstream.json().catch(() => ({}));
-      if (!upstream.ok) throw new Error("Search provider returned HTTP " + upstream.status + " for " + domain + ".");
-      const results = Array.isArray(payload.results) ? payload.results : [];
-      return { domain, query, results, totalResults: Number(payload.total_results || results.length) };
-    }));
+    const failedDomains = [];
+    let totalResults = 0;
+    let searchCount = 0;
 
-    try {
-      const batches = await Promise.all(searches);
-      for (const batch of batches) {
-        for (const r of batch.results) {
-          let resultUrl = String(r.url || "");
-          if (resultUrl && !/^https:\/\//i.test(resultUrl)) resultUrl = "https://" + resultUrl.replace(/^\/+/, "");
-          let host = "";
-          try { host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, ""); } catch {}
-          if (!domains.some((d) => host === d || host.endsWith("." + d)) || !resultUrl.startsWith("https://") || !r.title) continue;
-          const key = resultUrl.split("#")[0].replace(/\/$/, "").toLowerCase();
-          if (!uniqueResults.has(key)) uniqueResults.set(key, {
-            title: String(r.title || ""),
-            snippet: String(r.snippet || ""),
-            url: resultUrl,
-            source: String(r.site_name || host),
-            date: r.date ? String(r.date) : "",
-            isListingPage: true,
-            matchedQuery: batch.query,
-          });
+    // Search each marketplace separately. Keep failures isolated so one provider
+    // error (for example, TruckPaper returning 502) does not discard other results.
+    const domainRuns = await Promise.all(domains.map(async (domain) => {
+      const domainResults = [];
+      let domainTotal = 0;
+      let completedQueries = 0;
+      let lastError = "";
+
+      for (const text of queryTexts) {
+        const query = "site:" + domain + " " + text;
+        try {
+          const batch = await tinyfishSearch(query, env.TINYFISH_API_KEY);
+          completedQueries++;
+          domainTotal += batch.totalResults || batch.results.length;
+
+          for (const result of batch.results) {
+            let resultUrl = String(result.url || "");
+            if (resultUrl && !/^https:\/\//i.test(resultUrl)) {
+              resultUrl = "https://" + resultUrl.replace(/^\/+/, "");
+            }
+            let host = "";
+            try {
+              host = new URL(resultUrl).hostname.toLowerCase().replace(/^www\./, "");
+            } catch {}
+            if (
+              !(host === domain || host.endsWith("." + domain)) ||
+              !resultUrl.startsWith("https://") ||
+              !result.title
+            ) continue;
+
+            domainResults.push({
+              title: String(result.title || ""),
+              snippet: String(result.snippet || ""),
+              url: resultUrl,
+              source: String(result.site_name || host),
+              date: result.date ? String(result.date) : "",
+              isListingPage: true,
+              matchedQuery: query,
+            });
+          }
+          // Avoid extra provider requests once this domain has returned listings.
+          if (domainResults.length >= 5) break;
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : String(error);
+          // Continue to the next simpler query; a single failed query is not fatal.
         }
       }
-      const results = [...uniqueResults.values()];
-      return json({
-        query: "separate marketplace searches (" + domains.join(", ") + ")",
-        domain: requestedDomain,
-        searchedDomains: domains,
-        results,
-        totalResults: batches.reduce((sum, b) => sum + b.totalResults, 0),
-        searchCount: batches.length,
-        provider: "TinyFish Search",
-        retrievedAt: new Date().toISOString(),
-        note: "Search results are not verified inventory. Confirm the original listing, fixed asking price, auction status, and availability.",
-      }, 200, origin);
-    } catch (error) {
-      return json({ error: error instanceof Error ? error.message : "Search provider failed." }, 502, origin);
+
+      return {
+        domain,
+        results: domainResults,
+        totalResults: domainTotal,
+        searchCount: completedQueries,
+        error: completedQueries === 0 ? lastError : "",
+      };
+    }));
+
+    for (const run of domainRuns) {
+      totalResults += run.totalResults;
+      searchCount += run.searchCount;
+      for (const result of run.results) {
+        const key = result.url.split("#")[0].replace(/\/$/, "").toLowerCase();
+        if (!uniqueResults.has(key)) uniqueResults.set(key, result);
+      }
+      if (run.error) failedDomains.push({ domain: run.domain, error: run.error });
     }
+
+    const results = [...uniqueResults.values()];
+
+    if (results.length === 0 && failedDomains.length > 0) {
+      return json({
+        error: "TinyFish Search failed for every marketplace. The detailed provider error is included below.",
+        failedDomains,
+        searchedDomains: domains,
+        searchCount,
+      }, 502);
+    }
+
+    return json({
+      query: "separate marketplace searches (" + domains.join(", ") + ")",
+      domain: requestedDomain,
+      searchedDomains: domains,
+      results,
+      totalResults,
+      searchCount,
+      failedDomains,
+      provider: "TinyFish Search",
+      retrievedAt: new Date().toISOString(),
+      note: "Search results are not verified inventory. Confirm the original listing, asking price, auction status, and availability.",
+    });
   },
 };
