@@ -142,7 +142,7 @@ export default {
           [year, makeInQuery, model, "sleeper"].filter(Boolean).join(" "),
           [makeInQuery, model, "used semi truck for sale"].filter(Boolean).join(" "),
         ])]
-      : [rawQuery, ...makeNames.map((make) => make + " " + rawQuery)];
+      : [...new Set([rawQuery, "used semi truck for sale " + rawQuery])];
 
     const uniqueResults = new Map();
     const failedDomains = [];
