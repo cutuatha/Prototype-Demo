@@ -40,7 +40,15 @@ try{confirmedId=localStorage.getItem("prototypeTruckConfirmedId");}catch(e){}
 try {
   const knownUrl = "https://www.mylittlesalesman.com/2012-peterbilt-386-sleeper-semi-truck-mid-roof-sleeper-paccar-490hp-13-speed-manual-14453004";
   const known = trucks.find(t => {
-    try { return /14453004/.test(new URL(t.url || "").pathname); } catch(e) { return false; }
+    const rawUrl = String(t.url || t.listingUrl || t.originalUrl || "");
+    const name = String(t.name || t.title || t.model || "");
+    const source = String(t.source || t.listingSource || "");
+    // Prefer the unique marketplace listing ID. If the old record lost its URL,
+    // accept only a clearly identified 2012 Peterbilt 386 from this marketplace.
+    if (/14453004/.test(rawUrl)) return true;
+    const clearlySameTruck = /\\b2012\\b/i.test(name) && /\\bPeterbilt\\b/i.test(name) && /\\b386\\b/i.test(name);
+    const marketplaceMatch = /mylittlesalesman/i.test(rawUrl) || /mylittlesalesman/i.test(source);
+    return clearlySameTruck && marketplaceMatch;
   });
   if (known) {
     known.year = known.year || "2012";
