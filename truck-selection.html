@@ -47,8 +47,13 @@ try {
     // accept only a clearly identified 2012 Peterbilt 386 from this marketplace.
     if (/14453004/.test(rawUrl)) return true;
     const clearlySameTruck = /2012/i.test(name) && /Peterbilt/i.test(name) && /386/i.test(name);
+    const distinctiveOldTitle = /mid[- ]?roof sleeper/i.test(name) &&
+      /paccar/i.test(name) && /490\s*hp/i.test(name) &&
+      /13[- ]?speed/i.test(name) && /manual/i.test(name);
     const marketplaceMatch = /mylittlesalesman/i.test(rawUrl) || /mylittlesalesman/i.test(source);
-    return clearlySameTruck && marketplaceMatch;
+    // Some older saved cards stored only the descriptive listing title, not year,
+    // make/model, or source. This unusually specific title is a safe fallback.
+    return (clearlySameTruck && marketplaceMatch) || distinctiveOldTitle;
   });
   if (known) {
     known.year = known.year || "2012";
